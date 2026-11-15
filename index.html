@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3eee4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Éclipse">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Éclipse</title>
+<style>
+  :root{
+    --bg:#f3eee4; --ink:#26221e; --muted:#8a8178; --tile:#fffdf8; --line:#e2d9ca; --given:#ece5d8;
+    --accent:#c4532f; --sun:#f0b43c; --sun-d:#c47a1c; --moon:#5b74d6; --moon-d:#34489e; --bad:#d9463b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;display:flex;justify-content:center;
+       user-select:none;-webkit-tap-highlight-color:transparent;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .col{display:flex;flex-direction:column;align-items:center;width:560px;max-width:100%}
+  header{width:100%;padding:22px 20px 6px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+  h1{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:34px;margin:0;letter-spacing:.5px}
+  h1 span{color:var(--accent)}
+  .sub{font-size:13px;color:var(--muted);margin-top:2px}
+  .seg{display:inline-flex;background:#e8e0d2;border-radius:999px;padding:3px}
+  .seg button{border:0;background:transparent;padding:6px 12px;border-radius:999px;font:600 13px inherit;font-family:inherit;color:var(--muted);cursor:pointer}
+  .seg button.on{background:var(--tile);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .seg button:disabled{opacity:.45;cursor:default}
+  .bar{width:100%;padding:8px 20px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+  .info{width:100%;padding:6px 20px 0;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--muted)}
+  .info b{color:var(--ink);font-variant-numeric:tabular-nums}
+  main{margin-top:12px;padding:0 12px}
+  #board{--n:6;position:relative;display:grid;grid-template-columns:repeat(var(--n),var(--sz));
+         background:var(--line);gap:2px;padding:2px;border-radius:14px;box-shadow:0 2px 0 #d8cdbb;touch-action:manipulation}
+  .c{width:var(--sz);height:var(--sz);background:var(--tile);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative}
+  .c:first-child{border-top-left-radius:12px}
+  .c.tr{border-top-right-radius:12px} .c.bl{border-bottom-left-radius:12px} .c.br{border-bottom-right-radius:12px}
+  .c.given{background:var(--given);cursor:default}
+  .c svg{width:62%;height:62%;pointer-events:none}
+  .c.pop svg{animation:pop .18s ease-out}
+  @keyframes pop{0%{transform:scale(.55)}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+  .c.bad{background:repeating-linear-gradient(135deg,#fbe3df 0 6px,#f6d0ca 6px 12px)}
+  .c.given.bad{background:repeating-linear-gradient(135deg,#ead3cc 0 6px,#e2c1b9 6px 12px)}
+  .c.hint::after{content:"";position:absolute;inset:3px;border-radius:9px;border:3px solid var(--accent);animation:pulse 1.1s infinite}
+  @keyframes pulse{50%{opacity:.2}}
+  .sg{position:absolute;width:calc(var(--sz)*.34);height:calc(var(--sz)*.34);transform:translate(-50%,-50%);display:flex;align-items:center;
+      justify-content:center;background:var(--bg);border-radius:50%;font:700 calc(var(--sz)*.28)/1 "Segoe UI",system-ui,sans-serif;color:#7a6a52;z-index:2;pointer-events:none}
+  .sg.bad{color:#fff;background:var(--bad)}
+  body.won .c{animation:wave .5s ease both;animation-delay:calc(var(--d)*35ms)}
+  @keyframes wave{40%{transform:scale(.88)}100%{transform:scale(1)}}
+  #msg{min-height:44px;max-width:460px;margin:14px 20px 0;font-size:14.5px;line-height:1.4;text-align:center;color:var(--ink)}
+  #msg.ok{color:#3c7a3a;font-weight:600}
+  .actions{display:flex;gap:10px;margin:8px 0 18px;flex-wrap:wrap;justify-content:center}
+  .btn{border:0;border-radius:999px;padding:10px 18px;font:600 14px inherit;font-family:inherit;cursor:pointer;background:var(--tile);color:var(--ink);box-shadow:0 2px 0 var(--line)}
+  .btn.pri{background:var(--ink);color:var(--bg);box-shadow:none}
+  .btn:disabled{opacity:.4;cursor:default}
+  details{width:calc(100% - 40px);max-width:480px;background:#faf6ee;border-radius:16px;padding:4px 18px;margin:0 0 30px;box-shadow:0 2px 0 var(--line)}
+  summary{cursor:pointer;font-weight:700;padding:12px 0;list-style:none;display:flex;justify-content:space-between}
+  summary::after{content:"▾";color:var(--muted)} details[open] summary::after{content:"▴"}
+  details ul{margin:0 0 14px;padding-left:20px;line-height:1.55;font-size:14.5px}
+  details li{margin-bottom:6px}
+  .ico{display:inline-block;width:18px;height:18px;vertical-align:-3px}
+  .stats{display:flex;gap:16px;justify-content:center;font-size:13px;color:var(--muted);margin:0 0 14px;flex-wrap:wrap}
+  .stats b{display:block;font-size:20px;color:var(--ink);text-align:center;font-variant-numeric:tabular-nums}
+  #win{position:fixed;inset:0;background:rgba(38,34,30,.35);display:none;align-items:center;justify-content:center;z-index:10;padding:20px}
+  #win.show{display:flex;animation:fade .25s}
+  @keyframes fade{from{opacity:0}}
+  .card{background:var(--tile);border-radius:22px;padding:26px 26px 22px;width:340px;max-width:100%;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.18)}
+  .card h2{font-family:Georgia,serif;font-size:28px;margin:0 0 4px}
+  .card .big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;margin:6px 0 2px}
+  .card p{color:var(--muted);margin:2px 0 16px;font-size:14px}
+  .card .actions{margin:6px 0 0}
+  @media (max-width:520px){
+    header{padding:14px 14px 2px} h1{font-size:28px} .sub{font-size:12px}
+    .bar{padding:8px 14px;gap:6px} .info{padding:4px 14px 0}
+    .seg button{padding:6px 9px;font-size:12.5px}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="sun" viewBox="0 0 100 100">
+      <g stroke="var(--sun-d)" stroke-width="7" stroke-linecap="round">
+        <line x1="50" y1="6" x2="50" y2="16"/><line x1="50" y1="84" x2="50" y2="94"/>
+        <line x1="6" y1="50" x2="16" y2="50"/><line x1="84" y1="50" x2="94" y2="50"/>
+        <line x1="19" y1="19" x2="26" y2="26"/><line x1="74" y1="74" x2="81" y2="81"/>
+        <line x1="19" y1="81" x2="26" y2="74"/><line x1="74" y1="26" x2="81" y2="19"/>
+      </g>
+      <circle cx="50" cy="50" r="25" fill="var(--sun)" stroke="var(--sun-d)" stroke-width="5"/>
+    </symbol>
+    <symbol id="moon" viewBox="0 0 100 100">
+      <path d="M62 10a40 40 0 1 0 28 62A33 33 0 0 1 62 10z" fill="var(--moon)" stroke="var(--moon-d)" stroke-width="5" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+<div class="col">
+  <header>
+    <div><h1>Écl<span>i</span>pse</h1><div class="sub" id="sub"></div></div>
+    <div class="seg" id="mode"><button data-v="daily">Du jour</button><button data-v="free">Libre</button></div>
+  </header>
+  <div class="bar">
+    <div class="seg" id="diff"><button data-v="easy">Facile</button><button data-v="medium">Moyen</button><button data-v="hard">Difficile</button></div>
+    <div class="seg" id="size"><button data-v="6">6×6</button><button data-v="8">8×8</button></div>
+  </div>
+  <div class="info"><span>Temps <b id="time">0:00</b></span><span id="badge"></span><button class="btn" id="new">Nouvelle grille</button></div>
+  <main><div id="board"></div></main>
+  <div id="msg"></div>
+  <div class="actions">
+    <button class="btn" id="undo">Annuler</button>
+    <button class="btn" id="clear">Effacer</button>
+    <button class="btn pri" id="hint">Indice</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <details id="how">
+    <summary>Comment jouer</summary>
+    <ul>
+      <li>Remplis chaque case avec un soleil <svg class="ico"><use href="#sun"/></svg> ou une lune <svg class="ico"><use href="#moon"/></svg>.</li>
+      <li>Jamais plus de <b>deux</b> symboles identiques côte à côte, horizontalement ou verticalement.</li>
+      <li>Chaque ligne et chaque colonne contient <b>autant</b> de soleils que de lunes.</li>
+      <li><b>=</b> entre deux cases : elles portent le même symbole. <b>×</b> : symboles opposés.</li>
+      <li>Chaque grille a une seule solution et se résout sans deviner.</li>
+      <li>Clic : vide → soleil → lune. Clic droit : sens inverse. Ctrl+Z pour annuler.</li>
+      <li>« Du jour » : la même grille pour tout le monde chaque jour. « Libre » : autant de parties que tu veux.</li>
+    </ul>
+  </details>
+</div>
+<div id="win"><div class="card">
+  <h2 id="wt">Bravo !</h2>
+  <div class="big" id="wtime"></div>
+  <p id="wsub"></p>
+  <div class="stats" id="wstats"></div>
+  <div class="actions"><button class="btn" id="wclose">Voir la grille</button><button class="btn pri" id="wnext">Nouvelle grille</button></div>
+</div></div>
+<script src="engine.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const DIFF_NAME = { easy: "Facile", medium: "Moyen", hard: "Difficile" };
+const SYM = { 1: ["soleil", "soleils"], 2: ["lune", "lunes"] };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("eclipse-" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("eclipse-" + k, JSON.stringify(v)); } catch {} },
+};
+
+function today() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function fmt(s) { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, "0"); return h ? h + ":" + String(m).padStart(2, "0") + ":" + x : m + ":" + x; }
+function prettyDate(iso) { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }); }
+
+let prefs = store.get("prefs", { mode: "daily", diff: "medium", size: 6 });
+let stats = store.get("stats", { won: 0, best: {}, daily: {} });
+let P = null;       // puzzle
+let S = null;       // état de partie { grid, elapsed, hints, done, history }
+let hintCell = null, tick = null, lastTick = 0;
+
+function slotKey() { return prefs.mode === "daily" ? "daily" : "free"; }
+
+function startGame(fresh) {
+  let saved = store.get("game-" + slotKey(), null);
+  let n, diff, seed;
+  if (prefs.mode === "daily") {
+    const day = today();
+    n = 6; diff = "medium"; seed = Engine.hashString("eclipse-" + day);
+    if (!saved || saved.day !== day) saved = null;
+  } else {
+    n = prefs.size; diff = prefs.diff;
+    if (fresh || !saved || saved.n !== n || saved.diff !== diff) saved = null;
+    seed = saved ? saved.seed : (Math.random() * 2 ** 32) >>> 0;
+  }
+  P = Engine.generate(n, diff, seed);
+  S = saved || { day: today(), n, diff, seed, grid: P.givens.slice(), elapsed: 0, hints: 0, done: false, history: [] };
+  hintCell = null;
+  $("win").classList.remove("show");
+  document.body.classList.remove("won");
+  renderControls(); buildBoard(); render(); setMsg("");
+  if (S.done) setMsg(prefs.mode === "daily" ? "Grille du jour déjà résolue en " + fmt(S.elapsed) + ". Reviens demain, ou passe en mode Libre !" : "Grille résolue en " + fmt(S.elapsed) + ".", true);
+  startTimer();
+}
+
+function save() { store.set("game-" + slotKey(), S); }
+
+function renderControls() {
+  for (const b of $("mode").children) b.classList.toggle("on", b.dataset.v === prefs.mode);
+  const daily = prefs.mode === "daily";
+  for (const b of $("diff").children) { b.classList.toggle("on", b.dataset.v === (daily ? "medium" : prefs.diff)); b.disabled = daily; }
+  for (const b of $("size").children) { b.classList.toggle("on", +b.dataset.v === (daily ? 6 : prefs.size)); b.disabled = daily; }
+  $("new").style.visibility = daily ? "hidden" : "visible";
+  $("sub").textContent = daily ? "Grille du " + prettyDate(S.day) : "Partie libre · " + DIFF_NAME[P.diff] + " · " + P.n + "×" + P.n;
+  $("badge").textContent = "";
+  renderStats($("stats"));
+}
+
+function streak() {
+  let d = new Date(), k = 0;
+  const iso = x => x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+  if (!stats.daily[iso(d)]) d.setDate(d.getDate() - 1);
+  while (stats.daily[iso(d)]) { k++; d.setDate(d.getDate() - 1); }
+  return k;
+}
+function renderStats(el) {
+  const key = P.n + "-" + P.diff, best = stats.best[key];
+  el.innerHTML = `<div><b>${stats.won}</b>gagnées</div><div><b>${streak()}</b>série du jour</div><div><b>${best ? fmt(best) : "–"}</b>record ${P.n}×${P.n} ${DIFF_NAME[P.diff].toLowerCase()}</div>`;
+}
+
+function cellSize(n) {
+  const w = Math.min(window.innerWidth, 560) - 24 - 4 - (n - 1) * 2;
+  return Math.max(34, Math.min(n === 6 ? 72 : 58, Math.floor(w / n)));
+}
+
+function buildBoard() {
+  const n = P.n, b = $("board");
+  b.style.setProperty("--n", n);
+  b.style.setProperty("--sz", cellSize(n) + "px");
+  b.innerHTML = "";
+  for (let i = 0; i < n * n; i++) {
+    const c = document.createElement("div");
+    const r = Math.floor(i / n), x = i % n;
+    c.className = "c" + (P.givens[i] ? " given" : "") + (i === n - 1 ? " tr" : "") + (i === n * (n - 1) ? " bl" : "") + (i === n * n - 1 ? " br" : "");
+    c.style.setProperty("--d", r + x);
+    c.dataset.i = i;
+    b.appendChild(c);
+  }
+  P.edges.forEach((e, k) => {
+    const s = document.createElement("div");
+    s.className = "sg"; s.dataset.k = k; s.textContent = e.t === 1 ? "=" : "×";
+    const ra = Math.floor(e.a / n), ca = e.a % n;
+    // position sur la frontière entre les deux cases (2px de bordure + 2px d'écart)
+    if (e.b === e.a + 1) { s.style.left = `calc(${ca + 1} * (var(--sz) + 2px) + 1px)`; s.style.top = `calc(${ra} * (var(--sz) + 2px) + 2px + var(--sz) / 2)`; }
+    else { s.style.left = `calc(${ca} * (var(--sz) + 2px) + 2px + var(--sz) / 2)`; s.style.top = `calc(${ra + 1} * (var(--sz) + 2px) + 1px)`; }
+    b.appendChild(s);
+  });
+}
+
+const ICON = { 1: '<svg><use href="#sun"/></svg>', 2: '<svg><use href="#moon"/></svg>' };
+function render(popIdx) {
+  const v = Engine.violations(P.n, S.grid, P.edges);
+  for (const c of $("board").querySelectorAll(".c")) {
+    const i = +c.dataset.i, val = S.grid[i];
+    if (c.dataset.v !== String(val)) { c.innerHTML = ICON[val] || ""; c.dataset.v = val; }
+    c.classList.toggle("bad", v.cells.has(i));
+    c.classList.toggle("hint", hintCell === i);
+    c.classList.toggle("pop", popIdx === i);
+  }
+  for (const s of $("board").querySelectorAll(".sg")) s.classList.toggle("bad", v.edges.has(+s.dataset.k));
+  $("undo").disabled = S.done || !S.history.length;
+  $("clear").disabled = S.done;
+  $("hint").disabled = S.done;
+  $("time").textContent = fmt(S.elapsed);
+  return v;
+}
+
+function setMsg(t, ok) { $("msg").textContent = t; $("msg").className = ok ? "ok" : ""; }
+
+function play(i, dir) {
+  if (S.done || P.givens[i]) return;
+  const before = S.grid[i];
+  const next = dir > 0 ? (before + 1) % 3 : (before + 2) % 3;
+  S.history.push([i, before]);
+  if (S.history.length > 500) S.history.shift();
+  S.grid[i] = next;
+  if (hintCell === i) hintCell = null;
+  setMsg("");
+  const pop = $("board").children[i]; pop.classList.remove("pop"); void pop.offsetWidth;
+  const v = render(i);
+  if (!S.grid.includes(0) && v.cells.size === 0 && v.edges.size === 0) win();
+  save();
+}
+
+function undo() {
+  if (S.done || !S.history.length) return;
+  const [i, val] = S.history.pop();
+  S.grid[i] = val; hintCell = null; setMsg("");
+  render(); save();
+}
+
+function clearGrid() {
+  if (S.done) return;
+  for (let i = 0; i < S.grid.length; i++) if (!P.givens[i] && S.grid[i]) { S.history.push([i, S.grid[i]]); S.grid[i] = 0; }
+  hintCell = null; setMsg(""); render(); save();
+}
+
+const REASON = {
+  eq: d => `Le signe = impose à cette case le même symbole que sa voisine : ${SYM[d.value][0]}.`,
+  x: d => `Le signe × impose à cette case le symbole opposé à sa voisine : ${SYM[d.value][0]}.`,
+  count: d => `Cette ${d.line.kind === "row" ? "ligne" : "colonne"} a déjà ${P.n / 2} ${SYM[d.sym][1]} : il ne reste que des ${SYM[d.value][1]}.`,
+  pair: d => `Deux ${SYM[d.sym][1]} se suivent déjà : un troisième est interdit, il faut une ${SYM[d.value][0]}.`.replace("une soleil", "un soleil"),
+  gap: d => `Une case entre deux ${SYM[d.sym][1]} : sinon trois se suivraient, il faut un${d.value === 2 ? "e" : ""} ${SYM[d.value][0]}.`,
+  line: d => `En combinant toutes les règles sur cette ${d.line.kind === "row" ? "ligne" : "colonne"}, une seule possibilité reste ici : ${SYM[d.value][0]}.`,
+};
+
+function hint() {
+  if (S.done) return;
+  // Second appui sur le même indice : on place le symbole.
+  if (hintCell !== null && !S.grid[hintCell]) { const i = hintCell; hintCell = null; const want = P.sol[i]; S.history.push([i, 0]); S.grid[i] = want; render(i); setMsg(""); if (!S.grid.includes(0)) { const v = Engine.violations(P.n, S.grid, P.edges); if (!v.cells.size && !v.edges.size) win(); } save(); return; }
+  S.hints++;
+  const wrong = S.grid.findIndex((v, i) => v && v !== P.sol[i]);
+  if (wrong >= 0) { hintCell = wrong; render(); setMsg("Cette case est incorrecte. Corrige-la (ou utilise Annuler)."); save(); return; }
+  const d = Engine.nextDeduction(P.n, S.grid, P.edges);
+  if (!d) { setMsg("Aucune déduction trouvée."); return; }
+  hintCell = d.cell; render();
+  setMsg(REASON[d.rule](d) + " (Appuie encore sur Indice pour la remplir.)");
+  save();
+}
+
+function win() {
+  S.done = true; hintCell = null; stopTimer();
+  stats.won++;
+  const key = P.n + "-" + P.diff, prev = stats.best[key];
+  const record = !S.hints && (!prev || S.elapsed < prev);
+  if (record) stats.best[key] = Math.floor(S.elapsed);
+  if (prefs.mode === "daily" && !stats.daily[S.day]) stats.daily[S.day] = Math.floor(S.elapsed);
+  store.set("stats", stats); save();
+  render(); document.body.classList.add("won");
+  $("wt").textContent = record ? "Nouveau record !" : "Bravo !";
+  $("wtime").textContent = fmt(S.elapsed);
+  $("wsub").textContent = (prefs.mode === "daily" ? "Grille du jour" : DIFF_NAME[P.diff] + " · " + P.n + "×" + P.n) + (S.hints ? ` · ${S.hints} indice${S.hints > 1 ? "s" : ""} (pas de record)` : " · sans indice");
+  renderStats($("wstats")); renderStats($("stats"));
+  $("wnext").textContent = prefs.mode === "daily" ? "Jouer en libre" : "Nouvelle grille";
+  setMsg("Résolue en " + fmt(S.elapsed) + " !", true);
+  setTimeout(() => $("win").classList.add("show"), 650);
+}
+
+function startTimer() {
+  stopTimer();
+  if (S.done) return;
+  lastTick = performance.now();
+  tick = setInterval(() => {
+    const now = performance.now();
+    if (!document.hidden) { S.elapsed += (now - lastTick) / 1000; $("time").textContent = fmt(S.elapsed); }
+    lastTick = now;
+    if (Math.floor(S.elapsed) % 5 === 0) save();
+  }, 250);
+}
+function stopTimer() { if (tick) clearInterval(tick); tick = null; }
+
+$("board").addEventListener("click", e => { const c = e.target.closest(".c"); if (c) play(+c.dataset.i, 1); });
+$("board").addEventListener("contextmenu", e => { e.preventDefault(); const c = e.target.closest(".c"); if (c) play(+c.dataset.i, -1); });
+$("undo").onclick = undo;
+$("clear").onclick = clearGrid;
+$("hint").onclick = hint;
+$("new").onclick = () => startGame(true);
+$("wclose").onclick = () => $("win").classList.remove("show");
+$("wnext").onclick = () => { if (prefs.mode === "daily") { prefs.mode = "free"; store.set("prefs", prefs); } startGame(true); };
+$("win").onclick = e => { if (e.target.id === "win") $("win").classList.remove("show"); };
+$("mode").onclick = e => { const v = e.target.dataset.v; if (!v || v === prefs.mode) return; save(); prefs.mode = v; store.set("prefs", prefs); startGame(false); };
+$("diff").onclick = e => { const v = e.target.dataset.v; if (!v || v === prefs.diff || prefs.mode === "daily") return; save(); prefs.diff = v; store.set("prefs", prefs); startGame(true); };
+$("size").onclick = e => { const v = +e.target.dataset.v; if (!v || v === prefs.size || prefs.mode === "daily") return; save(); prefs.size = v; store.set("prefs", prefs); startGame(true); };
+document.addEventListener("keydown", e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); } if (e.key === "Escape") $("win").classList.remove("show"); });
+window.addEventListener("resize", () => $("board").style.setProperty("--sz", cellSize(P.n) + "px"));
+window.addEventListener("pagehide", save);
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); else if (prefs.mode === "daily" && S.day !== today()) startGame(false); });
+
+if (!store.get("seen", false)) { $("how").open = true; store.set("seen", true); }
+startGame(false);
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
