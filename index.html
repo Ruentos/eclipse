@@ -51,7 +51,23 @@
   .sg.bad{color:#fff;background:var(--bad)}
   body.won .c{animation:wave .5s ease both;animation-delay:calc(var(--d)*35ms)}
   @keyframes wave{40%{transform:scale(.88)}100%{transform:scale(1)}}
-  #msg{min-height:44px;max-width:460px;margin:14px 20px 0;font-size:14.5px;line-height:1.4;text-align:center;color:var(--ink)}
+  #msg{min-height:44px;max-width:480px;margin:14px 20px 0;font-size:14.5px;line-height:1.45;text-align:center;color:var(--ink)}
+  #msg.ex{text-align:left;background:#faf6ee;border-radius:16px;padding:12px 16px;box-shadow:0 2px 0 var(--line)}
+  #msg ol{margin:6px 0;padding-left:22px} #msg li{margin:3px 0}
+  #msg .tip{color:var(--muted);font-size:13px;margin-top:6px}
+  #msg .ko{color:var(--bad);font-weight:600}
+  #msg .opts{display:flex;flex-direction:column;gap:3px;margin:8px 0}
+  #msg .opts div{display:flex;gap:2px} #msg .opts svg{width:20px;height:20px}
+  #msg .opts .on{background:#f6dfb8;border-radius:4px}
+  #msg .ico{vertical-align:-4px}
+  .c.ln{background:#fbf3e1} .c.given.ln{background:#e9dfcb}
+  .c.mark::before{content:"";position:absolute;inset:5px;border-radius:8px;border:2px dashed #b9a582}
+  .c.ko::before{content:"";position:absolute;inset:3px;border-radius:9px;border:3px solid var(--bad)}
+  .gh{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.42;pointer-events:none}
+  .gh svg{width:62%;height:62%}
+  .nb{position:absolute;top:3px;left:4px;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;
+      font:700 11px/18px "Segoe UI",system-ui,sans-serif;text-align:center;padding:0 4px;pointer-events:none;z-index:3}
+  .nb.q{background:var(--ink)} .nb.x{background:var(--bad)}
   #msg.ok{color:#3c7a3a;font-weight:600}
   .actions{display:flex;gap:10px;margin:8px 0 18px;flex-wrap:wrap;justify-content:center}
   .btn{border:0;border-radius:999px;padding:10px 18px;font:600 14px inherit;font-family:inherit;cursor:pointer;background:var(--tile);color:var(--ink);box-shadow:0 2px 0 var(--line)}
@@ -154,7 +170,7 @@ let prefs = store.get("prefs", { mode: "daily", diff: "medium", size: 6 });
 let stats = store.get("stats", { won: 0, best: {}, daily: {} });
 let P = null;       // puzzle
 let S = null;       // état de partie { grid, elapsed, hints, done, history }
-let hintCell = null, tick = null, lastTick = 0;
+let H = null, winTimer = null, tick = null, lastTick = 0;
 
 function slotKey() { return prefs.mode === "daily" ? "daily" : "free"; }
 
@@ -172,7 +188,7 @@ function startGame(fresh) {
   }
   P = Engine.generate(n, diff, seed);
   S = saved || { day: today(), n, diff, seed, grid: P.givens.slice(), elapsed: 0, hints: 0, done: false, history: [] };
-  hintCell = null;
+  H = null; clearTimeout(winTimer);
   $("win").classList.remove("show");
   document.body.classList.remove("won");
   renderControls(); buildBoard(); render(); setMsg("");
@@ -241,8 +257,17 @@ function render(popIdx) {
     const i = +c.dataset.i, val = S.grid[i];
     if (c.dataset.v !== String(val)) { c.innerHTML = ICON[val] || ""; c.dataset.v = val; }
     c.classList.toggle("bad", v.cells.has(i));
-    c.classList.toggle("hint", hintCell === i);
+    c.classList.toggle("hint", !!H && H.cell === i);
+    c.classList.toggle("ln", !!H && H.line.has(i));
+    c.classList.toggle("mark", !!H && H.marks.has(i));
+    c.classList.toggle("ko", !!H && H.bad.has(i));
     c.classList.toggle("pop", popIdx === i);
+    c.querySelectorAll(".gh,.nb").forEach(e => e.remove());
+    const gh = H && H.ghosts.get(i);
+    if (gh) {
+      if (!val) c.insertAdjacentHTML("beforeend", `<span class="gh">${ICON[gh.v]}</span>`);
+      c.insertAdjacentHTML("beforeend", `<span class="nb ${gh.cls || ""}">${gh.label}</span>`);
+    }
   }
   for (const s of $("board").querySelectorAll(".sg")) s.classList.toggle("bad", v.edges.has(+s.dataset.k));
   $("undo").disabled = S.done || !S.history.length;
@@ -253,6 +278,7 @@ function render(popIdx) {
 }
 
 function setMsg(t, ok) { $("msg").textContent = t; $("msg").className = ok ? "ok" : ""; }
+function setHtml(h) { $("msg").innerHTML = h; $("msg").className = "ex"; }
 
 function play(i, dir) {
   if (S.done || P.givens[i]) return;
@@ -261,7 +287,7 @@ function play(i, dir) {
   S.history.push([i, before]);
   if (S.history.length > 500) S.history.shift();
   S.grid[i] = next;
-  if (hintCell === i) hintCell = null;
+  if (H && H.cell === i) H = null;
   setMsg("");
   const pop = $("board").children[i]; pop.classList.remove("pop"); void pop.offsetWidth;
   const v = render(i);
@@ -272,41 +298,102 @@ function play(i, dir) {
 function undo() {
   if (S.done || !S.history.length) return;
   const [i, val] = S.history.pop();
-  S.grid[i] = val; hintCell = null; setMsg("");
+  S.grid[i] = val; H = null; setMsg("");
   render(); save();
 }
 
 function clearGrid() {
   if (S.done) return;
   for (let i = 0; i < S.grid.length; i++) if (!P.givens[i] && S.grid[i]) { S.history.push([i, S.grid[i]]); S.grid[i] = 0; }
-  hintCell = null; setMsg(""); render(); save();
+  H = null; setMsg(""); render(); save();
 }
 
+// --- Indices expliqués -------------------------------------------------------
+const icon = v => `<svg class="ico"><use href="#${v === 1 ? "sun" : "moon"}"/></svg>`;
+const one = v => (v === 1 ? "un soleil" : "une lune") + " " + icon(v);
+const pl = v => SYM[v][1];
+const cap = t => t[0].toUpperCase() + t.slice(1);
+const lname = line => { const k = line.idx + 1; return `la ${k}${k === 1 ? "re" : "e"} ${line.kind === "row" ? "ligne" : "colonne"}`; };
+const kind = line => (line.kind === "row" ? "ligne" : "colonne");
+const posted = (k, v) => `${k} ${k > 1 ? pl(v) : SYM[v][0]}`;
+
+// Explication complète d'une règle (indice direct).
 const REASON = {
-  eq: d => `Le signe = impose à cette case le même symbole que sa voisine : ${SYM[d.value][0]}.`,
-  x: d => `Le signe × impose à cette case le symbole opposé à sa voisine : ${SYM[d.value][0]}.`,
-  count: d => `Cette ${d.line.kind === "row" ? "ligne" : "colonne"} a déjà ${P.n / 2} ${SYM[d.sym][1]} : il ne reste que des ${SYM[d.value][1]}.`,
-  pair: d => `Deux ${SYM[d.sym][1]} se suivent déjà : un troisième est interdit, il faut une ${SYM[d.value][0]}.`.replace("une soleil", "un soleil"),
-  gap: d => `Une case entre deux ${SYM[d.sym][1]} : sinon trois se suivraient, il faut un${d.value === 2 ? "e" : ""} ${SYM[d.value][0]}.`,
-  line: d => `En combinant toutes les règles sur cette ${d.line.kind === "row" ? "ligne" : "colonne"}, une seule possibilité reste ici : ${SYM[d.value][0]}.`,
+  eq: d => `Le signe <b>=</b> relie cette case à sa voisine : même symbole, donc ${one(d.value)}.`,
+  x: d => `Le signe <b>×</b> relie cette case à sa voisine : symbole opposé, donc ${one(d.value)}.`,
+  count: d => `${cap(lname(d.line))} a déjà ${P.n / 2} ${pl(d.sym)}, le maximum : les cases vides restantes sont des ${pl(d.value)}.`,
+  pair: d => `Deux ${pl(d.sym)} se suivent déjà : un troisième juste à côté est interdit, donc ${one(d.value)}.`,
+  gap: d => `Cette case est coincée entre deux ${pl(d.sym)} : un troisième ici en ferait trois à la suite, donc ${one(d.value)}.`,
+  xcount: d => `${cap(lname(d.line))} a déjà ${posted(d.known, d.sym)}. ${d.pairs > 1 ? "Chaque paire de cases reliée" : "Les deux cases reliées"} par <b>×</b> (en pointillés) ${d.pairs > 1 ? "contiendra" : "contiendront"} forcément un soleil <i>et</i> une lune : ça fait ${d.pairs > 1 ? d.pairs + " " + pl(d.sym) : "1 " + SYM[d.sym][0]} de plus, soit ${P.n / 2}, le maximum. Toutes les autres cases vides de la ${kind(d.line)} sont donc des ${pl(d.value)}.`,
+  eqcount: d => `Les deux cases reliées par <b>=</b> (en pointillés) portent le même symbole. Si c'étaient deux ${pl(d.sym)}, ${lname(d.line)} en aurait ${d.known + 2 + d.pairs}${d.pairs ? " (en comptant ceux apportés par les paires ×)" : ""}, plus que ${P.n / 2}. Ce sont donc deux ${pl(d.value)}.`,
 };
+
+// Étape courte d'un raisonnement par l'absurde.
+const STEP = {
+  eq: d => `${one(d.value)} (signe =)`,
+  x: d => `${one(d.value)} (signe ×)`,
+  count: d => `${one(d.value)} (la ${kind(d.line)} a déjà ${P.n / 2} ${pl(d.sym)})`,
+  pair: d => `${one(d.value)} (sinon trois ${pl(d.sym)} à la suite)`,
+  gap: d => `${one(d.value)} (entre deux ${pl(d.sym)})`,
+  xcount: d => `${one(d.value)} (avec les paires ×, la ${kind(d.line)} a déjà ses ${P.n / 2} ${pl(d.sym)})`,
+  eqcount: d => `${one(d.value)} (la paire = ne peut pas être deux ${pl(d.sym)})`,
+};
+function badText(b) {
+  if (b.type === "over") return `${lname(b.line)} aurait plus de ${P.n / 2} ${pl(b.sym)}`;
+  if (b.type === "triple") return `il y aurait trois ${pl(b.sym)} à la suite`;
+  if (b.type === "sign") return `le signe ${b.t === 1 ? "=" : "×"} ne serait plus respecté`;
+  return `la case <b>!</b> devrait être ${STEP[b.a.rule](b.a)}, mais aussi ${STEP[b.b.rule](b.b)}`;
+}
+
+function showHint(d) {
+  H = { cell: d.cell, line: new Set(d.line.cells), ghosts: new Map(), marks: new Set(d.marks || []), bad: new Set() };
+  const tail = `<div class="tip">Appuie encore sur Indice pour remplir la case entourée.</div>`;
+  if (d.rule === "absurd") {
+    const pr = d.proof, b = pr.bad;
+    H.ghosts.set(d.cell, { v: pr.assumed, label: "?", cls: "q" });
+    pr.steps.forEach((st, k) => H.ghosts.set(st.cell, { v: st.value, label: k + 1 }));
+    if (b.line && b.line !== d.line) b.line.cells.forEach(i => H.line.add(i));
+    if (b.cells) b.cells.forEach(i => H.bad.add(i));
+    if (b.type === "clash") { H.bad.add(b.cell); H.ghosts.set(b.cell, { v: b.a.value, label: "!", cls: "x" }); }
+    if (b.type === "over") b.line.cells.forEach(i => { if ((S.grid[i] || (H.ghosts.get(i) || {}).v) === b.sym) H.bad.add(i); });
+    const steps = pr.steps.map((st, k) => `<li value="${k + 1}">${STEP[st.rule](st)}</li>`).join("");
+    setHtml(`<b>Raisonnons par l'absurde</b> sur ${lname(d.line)}. Supposons que la case entourée <b>?</b> soit ${one(pr.assumed)}.` +
+      (steps ? ` Alors, de proche en proche, les cases numérotées deviennent :<ol>${steps}</ol>` : "<br>") +
+      `<span class="ko">Impossible : ${badText(b)}.</span><br>Donc cette case est forcément ${one(d.value)}.` + tail);
+  } else if (d.options) {
+    const k = d.line.cells.indexOf(d.cell);
+    const rows = d.options.map(p => `<div>${p.map((v, j) => `<span class="${j === k ? "on" : ""}">${icon(v)}</span>`).join("")}</div>`).join("");
+    setHtml(`Sur ${lname(d.line)}, avec les symboles et les signes déjà présents, il ne reste que ${d.options.length} façons valides de la remplir :<div class="opts">${rows}</div>` +
+      `Dans toutes, la case entourée (surlignée ci-dessus) est ${one(d.value)}.` + tail);
+  } else {
+    setHtml(REASON[d.rule](d) + tail);
+  }
+  render();
+}
 
 function hint() {
   if (S.done) return;
   // Second appui sur le même indice : on place le symbole.
-  if (hintCell !== null && !S.grid[hintCell]) { const i = hintCell; hintCell = null; const want = P.sol[i]; S.history.push([i, 0]); S.grid[i] = want; render(i); setMsg(""); if (!S.grid.includes(0)) { const v = Engine.violations(P.n, S.grid, P.edges); if (!v.cells.size && !v.edges.size) win(); } save(); return; }
+  if (H && !H.wrong && !S.grid[H.cell]) {
+    const i = H.cell; H = null; S.history.push([i, 0]); S.grid[i] = P.sol[i]; setMsg("");
+    const v = render(i);
+    if (!S.grid.includes(0) && !v.cells.size && !v.edges.size) win();
+    save(); return;
+  }
   S.hints++;
   const wrong = S.grid.findIndex((v, i) => v && v !== P.sol[i]);
-  if (wrong >= 0) { hintCell = wrong; render(); setMsg("Cette case est incorrecte. Corrige-la (ou utilise Annuler)."); save(); return; }
+  if (wrong >= 0) {
+    H = { cell: wrong, wrong: true, line: new Set(), ghosts: new Map(), marks: new Set(), bad: new Set() };
+    render(); setMsg("Cette case est incorrecte. Corrige-la (ou utilise Annuler)."); save(); return;
+  }
   const d = Engine.nextDeduction(P.n, S.grid, P.edges);
   if (!d) { setMsg("Aucune déduction trouvée."); return; }
-  hintCell = d.cell; render();
-  setMsg(REASON[d.rule](d) + " (Appuie encore sur Indice pour la remplir.)");
+  showHint(d);
   save();
 }
 
 function win() {
-  S.done = true; hintCell = null; stopTimer();
+  S.done = true; H = null; stopTimer();
   stats.won++;
   const key = P.n + "-" + P.diff, prev = stats.best[key];
   const record = !S.hints && (!prev || S.elapsed < prev);
@@ -320,7 +407,7 @@ function win() {
   renderStats($("wstats")); renderStats($("stats"));
   $("wnext").textContent = prefs.mode === "daily" ? "Jouer en libre" : "Nouvelle grille";
   setMsg("Résolue en " + fmt(S.elapsed) + " !", true);
-  setTimeout(() => $("win").classList.add("show"), 650);
+  winTimer = setTimeout(() => $("win").classList.add("show"), 650);
 }
 
 function startTimer() {

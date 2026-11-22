@@ -152,18 +152,115 @@
     return { grid: g, solved: !g.includes(0), contradiction: false };
   }
 
-  // Une seule déduction pour l'indice (règles simples d'abord).
+  // Règles intermédiaires (indices seulement) : une paire vide reliée par × contient forcément
+  // un soleil et une lune ; une paire reliée par = ajoute deux symboles identiques.
+  function pairDeductions(n, g, em, line, out) {
+    const c = line.cells, v = c.map(i => g[i]), half = n / 2;
+    const xs = [], eqs = [];
+    for (let k = 0; k < n - 1; k++) {
+      if (v[k] || v[k + 1]) continue;
+      const t = em.get(ekey(c[k], c[k + 1]));
+      if (t === 2) xs.push(k); else if (t === 1) eqs.push(k);
+    }
+    const xp = [];
+    for (const k of xs) if (!xp.length || k >= xp[xp.length - 1] + 2) xp.push(k);
+    const inX = new Set(); xp.forEach(k => { inX.add(k); inX.add(k + 1); });
+    for (const s of [1, 2]) {
+      const known = v.filter(x => x === s).length;
+      if (xp.length && known + xp.length === half) {
+        for (let k = 0; k < n; k++) if (!v[k] && !inX.has(k)) {
+          out.push({ cell: c[k], value: opp(s), rule: "xcount", line, sym: s, known, pairs: xp.length,
+                     marks: xp.flatMap(j => [c[j], c[j + 1]]) });
+        }
+      }
+      for (const k of eqs) {
+        const others = xp.filter(j => j + 1 < k || j > k + 1).length;
+        if (known + others + 2 > half) {
+          for (const j of [k, k + 1]) out.push({ cell: c[j], value: opp(s), rule: "eqcount", line, sym: s, known, pairs: others,
+                                                  marks: [c[k], c[k + 1]] });
+        }
+      }
+    }
+  }
+
+  // Problème évident sur une ligne (pour conclure un raisonnement par l'absurde).
+  function lineProblem(n, g, em, line) {
+    const c = line.cells, v = c.map(i => g[i]), half = n / 2;
+    for (const s of [1, 2]) if (v.filter(x => x === s).length > half) return { type: "over", sym: s };
+    for (let k = 0; k < n - 2; k++) if (v[k] && v[k] === v[k + 1] && v[k] === v[k + 2]) return { type: "triple", sym: v[k], cells: [c[k], c[k + 1], c[k + 2]] };
+    for (let k = 0; k < n - 1; k++) {
+      const t = em.get(ekey(c[k], c[k + 1]));
+      if (t && v[k] && v[k + 1] && ((t === 1) !== (v[k] === v[k + 1]))) return { type: "sign", t, cells: [c[k], c[k + 1]] };
+    }
+    return null;
+  }
+
+  const ORDER = ["eq", "x", "count", "pair", "gap", "xcount", "eqcount"];
+  const byOrder = (a, b) => ORDER.indexOf(a.rule) - ORDER.indexOf(b.rule);
+
+  // « Si cette case était l'autre symbole… » : on enchaîne les règles simples sur la ligne jusqu'à l'impossibilité.
+  // scope : les lignes sur lesquelles on raisonne (la ligne de la case, ou toute la grille en dernier recours).
+  function contradiction(n, g, em, scope, cell, value) {
+    const t = g.slice(), assumed = opp(value), steps = [];
+    t[cell] = assumed;
+    for (let guard = 0; guard < 4 * n; guard++) {
+      for (const line of scope) {
+        const bad = lineProblem(n, t, em, line);
+        if (bad) return { assumed, steps, bad: Object.assign({ line }, bad) };
+      }
+      const ds = [];
+      for (const line of scope) simpleDeductions(n, t, em, line, ds);
+      if (!ds.length) for (const line of scope) pairDeductions(n, t, em, line, ds);
+      if (!ds.length) return null;
+      ds.sort(byOrder);
+      const seen = new Map();
+      for (const d of ds) {
+        const p = seen.get(d.cell);
+        if (p && p.value !== d.value) return { assumed, steps, bad: { type: "clash", line: d.line, cell: d.cell, a: p, b: d } };
+        if (!p) seen.set(d.cell, d);
+      }
+      t[ds[0].cell] = ds[0].value;
+      steps.push(ds[0]);
+    }
+    return null;
+  }
+
+  // Une seule déduction pour l'indice, la plus facile à expliquer.
   function nextDeduction(n, g, edges) {
     const em = edgeMap(edges), L = lines(n);
-    const order = ["eq", "x", "count", "pair", "gap"];
-    const ds = [];
+    let ds = [];
     for (const line of L) simpleDeductions(n, g, em, line, ds);
-    if (ds.length) {
-      ds.sort((a, b) => order.indexOf(a.rule) - order.indexOf(b.rule));
-      return ds[0];
-    }
+    if (!ds.length) for (const line of L) pairDeductions(n, g, em, line, ds);
+    if (ds.length) return ds.sort(byOrder)[0];
     for (const line of L) patternDeductions(n, g, em, line, ds);
-    return ds[0] || null;
+    if (!ds.length) return null;
+    // Parmi les cases forcées, on garde celle dont la preuve par l'absurde est la plus courte.
+    let best = null;
+    for (const d of ds) {
+      const proof = contradiction(n, g, em, [d.line], d.cell, d.value);
+      if (proof && (!best || proof.steps.length < best.proof.steps.length)) best = Object.assign({}, d, { rule: "absurd", proof });
+    }
+    if (best) return best;
+    for (const d of ds) {
+      const proof = contradiction(n, g, em, L, d.cell, d.value);
+      if (proof && (!best || proof.steps.length < best.proof.steps.length)) best = Object.assign({}, d, { rule: "absurd", proof });
+    }
+    if (best) return best;
+    // Dernier recours : on montre toutes les façons encore possibles de remplir la ligne.
+    const d = ds[0];
+    return Object.assign({}, d, { options: linePossibilities(n, g, em, d.line) });
+  }
+
+  function linePossibilities(n, g, em, line) {
+    const c = line.cells, v = c.map(i => g[i]);
+    return patterns(n).filter(p => {
+      for (let k = 0; k < n; k++) if (v[k] && v[k] !== p[k]) return false;
+      for (let k = 0; k < n - 1; k++) {
+        const t = em.get(ekey(c[k], c[k + 1]));
+        if ((t === 1 && p[k] !== p[k + 1]) || (t === 2 && p[k] === p[k + 1])) return false;
+      }
+      return true;
+    });
   }
 
   // Règles enfreintes par la grille du joueur (sans regarder la solution).
@@ -232,7 +329,7 @@
     }
   }
 
-  const api = { rng, hashString, patterns, generate, solve, nextDeduction, violations, edgeMap };
+  const api = { lines, rng, hashString, patterns, generate, solve, nextDeduction, violations, edgeMap };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Engine = api;
 })(this);

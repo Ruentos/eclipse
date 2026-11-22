@@ -1,5 +1,5 @@
 // Offline cache for Éclipse. Bump VERSION whenever index.html or engine.js changes.
-const VERSION = "eclipse-v1";
+const VERSION = "eclipse-v2";
 const FILES = ["./", "index.html", "engine.js", "manifest.json", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
